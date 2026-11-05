@@ -1,4 +1,5 @@
 #include "border.h"
+#include "raincoat.h"
 #include "misc/autoyarn.h"
 // A weak default so the test targets, which compile this file without the
 // ObjC module, still link. src/autoyarn.m provides the real implementation
@@ -113,35 +114,34 @@ static void border_draw(struct border* border, CGRect frame, struct settings* se
       SLSWindowThaw(border->cid, border->wid);
       return;
     }
-    // A per-app rule wins over the colour this window would otherwise be
-    // handed, and may carry its own pattern.
-    uint32_t yarn = knit_color_for_app(border->app);
-    int chart = knit_pattern_for_app(border->app);
-    const struct app_rule* rule = knit_app_rule(border->app);
-    if (rule) yarn = rule->color;
-    if (knit_zigzag_active()) {
-      // One shared pattern, every app in its icon's colour, the 37
-      // hand-designed sweaters included; their own colours stay in By App.
-      knit_zigzag_yarn(border->app, border->owner_pid, &yarn, &chart);
-    } else if (!rule) {
-      // No hand-picked sweater: borrow the app's own colour from its icon
-      // rather than hashing its name into an arbitrary one.
-      uint32_t auto_yarn; int auto_chart;
-      if (knit_auto_yarn(border->app, border->owner_pid, &auto_yarn, &auto_chart)) {
-        yarn = auto_yarn;
-        if (auto_chart >= 0) chart = auto_chart;
+    float tuck = settings->border_order == BORDER_ORDER_ABOVE ? 1.f : g_knit.tuck;
+    float dim = border->focused ? 0.f : g_knit_dim;
+    if (g_knit_raincoat) {
+      raincoat_draw(border->context, border->drawing_bounds, border->radius,
+                    settings->border_width, dim, tuck);
+    } else {
+      // A per-app rule wins over the colour this window would otherwise be
+      // handed, and may carry its own pattern.
+      uint32_t yarn = knit_color_for_app(border->app);
+      int chart = knit_pattern_for_app(border->app);
+      const struct app_rule* rule = knit_app_rule(border->app);
+      if (rule) yarn = rule->color;
+      if (knit_zigzag_active()) {
+        // One shared pattern, every app in its icon's colour, the 37
+        // hand-designed sweaters included; their own colours stay in By App.
+        knit_zigzag_yarn(border->app, border->owner_pid, &yarn, &chart);
+      } else if (!rule) {
+        // No hand-picked sweater: borrow the app's own colour from its icon
+        // rather than hashing its name into an arbitrary one.
+        uint32_t auto_yarn; int auto_chart;
+        if (knit_auto_yarn(border->app, border->owner_pid, &auto_yarn, &auto_chart)) {
+          yarn = auto_yarn;
+          if (auto_chart >= 0) chart = auto_chart;
+        }
       }
+      knit_draw(border->context, border->drawing_bounds, border->radius,
+                settings->border_width, yarn, chart, dim, tuck);
     }
-
-    knit_draw(border->context,
-              border->drawing_bounds,
-              border->radius,
-              settings->border_width,
-              yarn,
-              chart,
-              border->focused ? 0.f : g_knit_dim,
-              // drawn above the window, a deep tuck would cover its content
-              settings->border_order == BORDER_ORDER_ABOVE ? 1.f : g_knit.tuck);
     CGContextFlush(border->context);
     CGContextRestoreGState(border->context);
     SLSFlushWindowContentRegion(border->cid, border->wid, NULL);

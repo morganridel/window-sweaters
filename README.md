@@ -9,6 +9,16 @@ https://github.com/user-attachments/assets/1ee85981-8882-4cb5-8bc3-75d8462a1f1a
 
 [See Window Sweaters in action on X →](https://x.com/saragordic/status/2098916110787916219)
 
+## Weather Sweaters fork
+
+Build this branch using [Build it yourself](#build-it-yourself) to get the weather features. The upstream downloads below are for the original app.
+
+Open the yarn icon → **Weather** → **Choose City…** to follow the weather in a city. When it rains, enabled sweater borders put on classic yellow raincoats with a smooth finish, welded seams and metal snaps. Rain falls above the wallpaper and behind your windows, with more drops in heavier rain. Your usual sweaters return as soon as conditions turn dry.
+
+**Preview Rain for 5 Minutes** works without a city or a network connection. Turn off **Show Desktop Rain** to keep the raincoats with no animation. The desktop layer also respects the macOS Reduce Motion setting.
+
+Live weather is optional and off until you choose a city. [Open-Meteo](https://open-meteo.com/) receives your search term and then the selected city's coordinates, rounded to two decimal places, about every ten minutes. The app does not use Location Services. When the last weather reading is more than 45 minutes old, the app returns to its usual sweaters.
+
 ## Get it
 
 You can just send this repo to your coding agent and ask it to install Window Sweaters for you:
@@ -72,7 +82,7 @@ If something looks wrong, [open an issue](https://github.com/saragordic/window-s
 You'll need Apple's Command Line Tools (`xcode-select --install`) and Python 3.
 
 ```sh
-git clone https://github.com/saragordic/window-sweaters.git
+git clone --branch weather-sweaters https://github.com/morganridel/window-sweaters.git
 cd window-sweaters
 ./scripts/build-app.sh
 python3 scripts/install-local.py

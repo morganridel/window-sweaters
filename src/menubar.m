@@ -10,11 +10,13 @@
 #include "misc/chart.h"
 #include "misc/apps.h"
 #include "misc/status_icon.h"
+#import "weather.h"
 #include <stdio.h>
 
 extern void knit_apply(const char* arg);   // main.c: feeds one "key=value"
 extern void knit_apps_filter_changed(void); // main.c: re-run the app gate
 extern bool g_knit_on;
+extern void knit_set_raincoat(bool on);
 
 enum { KNIT_MENU_HEADER_TAG = 0x6864 };   // a label, not a command
 
@@ -242,6 +244,7 @@ static void knit_load_prefs(void) {
 @property(strong) NSStatusItem* item;
 @property(strong) NSMutableDictionary<NSString*, NSImage*>* swatches;
 @property(strong) id activity;
+@property(strong) KnitWeather* weather;
 @end
 
 @implementation KnitMenu
@@ -511,6 +514,8 @@ static void knit_load_prefs(void) {
 
   [self buildApps:[self submenu:menu title:@"Apps"]];
 
+  if (self.weather) [self.weather populateMenu:[self submenu:menu title:@"Weather"]];
+
   NSMenu* pattern = [self submenu:menu title:@"Pattern"];
   NSMenuItem* byApp = [self add:pattern title:@"By App" arg:@"chart=by-app"
                            on:g_knit_pattern_by_app];
@@ -629,6 +634,7 @@ static KnitMenu* g_menu = nil;
   g_menu.item.button.image = knit_status_icon();
   [g_menu.item.button setAccessibilityLabel:@"Window Sweaters"];
 
+  g_menu.weather = [[KnitWeather alloc] initWithRaincoatChange:^(BOOL on) { knit_set_raincoat(on); }];
   NSMenu* menu = [[NSMenu alloc] initWithTitle:@"Window Sweaters"];
   menu.autoenablesItems = NO;
   [g_menu rebuild:menu];

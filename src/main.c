@@ -1,4 +1,5 @@
 #include "border.h"
+#include "raincoat.h"
 #include "misc/autoyarn.h"
 #include "hashtable.h"
 #include "events.h"
@@ -155,6 +156,12 @@ void knit_apply(const char* arg) {
   buf[n] = '\0';
   buf[n + 1] = '\0';
   message_handler(buf, (uint32_t)(n + 2));
+}
+
+void knit_set_raincoat(bool on) {
+  if (g_knit_raincoat == on) return;
+  g_knit_raincoat = on;
+  windows_update_all(&g_windows);
 }
 
 float knit_current_width(void) { return g_settings.border_width; }
