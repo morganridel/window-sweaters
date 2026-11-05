@@ -64,19 +64,6 @@ static bool border_check_too_small(struct border* border, CGRect window_frame) {
   return false;
 }
 
-static CGRect border_surface_bounds(CGRect window, const struct settings* settings) {
-  CGFloat offset = settings->border_width + BORDER_PADDING;
-  CGRect surface = CGRectInset(window, -offset, -offset);
-  if (g_knit_raincoat && settings->border_style == BORDER_STYLE_KNIT) {
-    // Screen coordinates run down. The drawing context runs up, so the
-    // extra space goes above the target without moving its local origin.
-    CGFloat hood = raincoat_hood_height(window.size.width);
-    surface.origin.y -= hood;
-    surface.size.height += hood;
-  }
-  return surface;
-}
-
 static bool border_calculate_bounds(struct border* border, CGRect* frame, struct settings* settings,
                                     const CGRect* observed_bounds) {
   CGRect window_frame = CGRectZero;
@@ -101,14 +88,14 @@ static bool border_calculate_bounds(struct border* border, CGRect* frame, struct
     return false;
   }
 
-  *frame = border_surface_bounds(window_frame, settings);
+  float border_offset = - settings->border_width - BORDER_PADDING;
+  *frame = CGRectInset(window_frame, border_offset, border_offset);
 
   border->origin = frame->origin;
   frame->origin = CGPointZero;
 
 
-  CGFloat inset = settings->border_width + BORDER_PADDING;
-  window_frame.origin = CGPointMake(inset, inset);
+  window_frame.origin = (CGPoint){ -border_offset, -border_offset };
   border->drawing_bounds = window_frame;
 
   return true;
@@ -520,7 +507,12 @@ static void border_apply_geometry(struct border* border, CGRect window_frame) {
     pthread_mutex_unlock(&border->mutex);
     return;
   }
-  CGPoint origin = border_surface_bounds(window_frame, settings).origin;
+  CGPoint origin = { .x = window_frame.origin.x
+                          - settings->border_width
+                          - BORDER_PADDING,
+                     .y = window_frame.origin.y
+                          - settings->border_width
+                          - BORDER_PADDING          };
 
   CFTypeRef transaction = SLSTransactionCreate(border->cid);
   if (transaction) {
