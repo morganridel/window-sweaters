@@ -13,7 +13,7 @@ https://github.com/user-attachments/assets/1ee85981-8882-4cb5-8bc3-75d8462a1f1a
 
 Build this branch using [Build it yourself](#build-it-yourself) to get the weather features. The upstream downloads below are for the original app.
 
-Open the yarn icon → **Weather** → **Choose City…** to follow the weather in a city. When it rains, enabled sweater borders put on classic yellow raincoats with a smooth finish, welded seams and metal snaps. Rain falls above the wallpaper and behind your windows, with more drops in heavier rain. Your usual sweaters return as soon as conditions turn dry.
+Open the yarn icon → **Weather** → **Choose City…** to follow the weather in a city. When it rains, enabled sweater borders put on matte yellow raincoats with a little hood, cream drawstrings and silver snaps. Rain falls above the wallpaper and behind your windows, with more drops in heavier rain. Your usual sweaters return as soon as conditions turn dry.
 
 **Preview Rain for 5 Minutes** works without a city or a network connection. Turn off **Show Desktop Rain** to keep the raincoats with no animation. The desktop layer also respects the macOS Reduce Motion setting.
 

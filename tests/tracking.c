@@ -374,6 +374,39 @@ int main(void) {
   opaque_commit_return = false;
   check_reorder(&border, 1, 1);
   assert(border.level == 19 && border.sub_level == 31);
+  // Rain adds room above the coat. It must not shift the body, including
+  // through the movement-only fast path and a resize to a hoodless window.
+  target = CGRectMake(100, 90, 280, 140);
+  border.metadata_dirty = false;
+  g_knit_on = true;
+  border_update(&border, false);
+  assert(border.frame.size.height == 176 && moved_to.y == 72);
+
+  g_knit_raincoat = true;
+  border_update(&border, false);
+  assert(border.frame.size.height == 215 && moved_to.y == 33);
+  assert(CGRectEqualToRect(border.drawing_bounds, CGRectMake(18, 18, 280, 140)));
+  old_shapes = shapes;
+  target.origin.y += 25;
+  border_update_geometry(&border);
+  assert(shapes == old_shapes && moved_to.y == 58);
+
+  target.size.width = 80;
+  border_update_geometry(&border);
+  test_time += .07;
+  border_update_geometry(&border);
+  assert(border.frame.size.height == 176 && moved_to.y == 97);
+  target.size.width = 280;
+  border_update_geometry(&border);
+  test_time += .07;
+  border_update_geometry(&border);
+  assert(border.frame.size.height == 215 && moved_to.y == 58);
+
+  g_knit_raincoat = false;
+  border_update(&border, false);
+  assert(border.frame.size.height == 176 && moved_to.y == 97);
+  puts("PASS: hood fits above the window through rain, movement, resize and dry weather");
+
   CGContextRelease(border.context);
   pthread_mutex_destroy(&border.mutex);
   puts("PASS: movement/resize, failure recovery, isolated depth repair, visibility/proxy guards, transaction failures");
