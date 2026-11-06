@@ -1,19 +1,50 @@
 #import "weather.h"
-#import "desktop_rain.h"
+#import "desktop_weather.h"
 
 static NSString* const CityKey = @"weatherCity";
 static NSString* const AutomaticKey = @"weatherAutomatic";
-static NSString* const DesktopRainKey = @"weatherDesktopRain";
+// Keep the stored preference from the original rain-only version.
+static NSString* const DesktopWeatherKey = @"weatherDesktopRain";
 static const NSTimeInterval RefreshInterval = 10 * 60;
 static const NSTimeInterval MaxObservationAge = 45 * 60;
 static const NSTimeInterval PreviewDuration = 5 * 60;
 
-static NSInteger rain_intensity(NSInteger code) {
+typedef struct {
+  KnitWeatherEffect effect;
+  NSInteger intensity;
+  __unsafe_unretained NSString* label;
+} WeatherScene;
+
+static WeatherScene scene_for_code(NSInteger code) {
+  // Open-Meteo WMO interpretation codes.
   switch (code) {
-    case 51: case 53: case 55: case 56: case 57: case 61: case 80: return 1;
-    case 63: case 66: case 81: return 2;
-    case 65: case 67: case 82: case 95: case 96: case 97: case 99: return 3;
-    default: return 0;
+    case 2: return (WeatherScene){KnitWeatherEffectClouds, 1, @"Partly Cloudy"};
+    case 3: return (WeatherScene){KnitWeatherEffectClouds, 3, @"Overcast"};
+    case 45: return (WeatherScene){KnitWeatherEffectFog, 2, @"Fog"};
+    case 48: return (WeatherScene){KnitWeatherEffectFog, 3, @"Freezing Fog"};
+    case 51: case 53: case 55: case 56: case 57:
+      return (WeatherScene){KnitWeatherEffectRain, 1, @"Drizzle"};
+    case 61: case 80: return (WeatherScene){KnitWeatherEffectRain, 1, @"Light Rain"};
+    case 63: case 66: case 81: return (WeatherScene){KnitWeatherEffectRain, 2, @"Rain"};
+    case 65: case 67: case 82: return (WeatherScene){KnitWeatherEffectRain, 3, @"Heavy Rain"};
+    case 95: case 96: case 97: case 99:
+      return (WeatherScene){KnitWeatherEffectRain, 3, @"Thunderstorm"};
+    case 71: case 77: case 85: return (WeatherScene){KnitWeatherEffectSnow, 1, @"Light Snow"};
+    case 73: return (WeatherScene){KnitWeatherEffectSnow, 2, @"Snow"};
+    case 75: case 86: return (WeatherScene){KnitWeatherEffectSnow, 3, @"Heavy Snow"};
+    case 0: return (WeatherScene){KnitWeatherEffectNone, 0, @"Clear"};
+    case 1: return (WeatherScene){KnitWeatherEffectNone, 0, @"Mostly Clear"};
+    default: return (WeatherScene){KnitWeatherEffectNone, 0, @"No Weather Effect"};
+  }
+}
+
+static NSString* effect_name(KnitWeatherEffect effect) {
+  switch (effect) {
+    case KnitWeatherEffectRain: return @"Rain";
+    case KnitWeatherEffectSnow: return @"Snow";
+    case KnitWeatherEffectFog: return @"Fog";
+    case KnitWeatherEffectClouds: return @"Clouds";
+    case KnitWeatherEffectNone: return @"None";
   }
 }
 
@@ -94,7 +125,7 @@ static NSNumber* observation_code(NSDictionary* response, NSTimeInterval now,
 }
 
 @interface KnitWeather ()
-@property(strong) KnitDesktopRain* rain;
+@property(strong) KnitDesktopWeather* desktop;
 @property(copy) void (^raincoatChange)(BOOL);
 @property(strong) NSURLSession* session;
 @property(strong) NSURLSessionDataTask* forecast;
@@ -104,8 +135,8 @@ static NSNumber* observation_code(NSDictionary* response, NSTimeInterval now,
 @property(strong) NSNumber* weatherCode;
 @property NSTimeInterval observationTime;
 @property BOOL automatic;
-@property BOOL showDesktopRain;
-@property BOOL preview;
+@property BOOL showDesktopWeather;
+@property KnitWeatherEffect previewEffect;
 @property BOOL searching;
 @end
 
@@ -117,10 +148,10 @@ static NSNumber* observation_code(NSDictionary* response, NSTimeInterval now,
   NSDictionary* city = dictionary([defaults objectForKey:CityKey]);
   if (valid_city(city)) self.city = city;
   self.automatic = self.city && [defaults boolForKey:AutomaticKey];
-  self.showDesktopRain = [defaults objectForKey:DesktopRainKey] == nil ||
-                         [defaults boolForKey:DesktopRainKey];
+  self.showDesktopWeather = [defaults objectForKey:DesktopWeatherKey] == nil ||
+                         [defaults boolForKey:DesktopWeatherKey];
   self.raincoatChange = change;
-  self.rain = [KnitDesktopRain new];
+  self.desktop = [KnitDesktopWeather new];
   NSURLSessionConfiguration* config = NSURLSessionConfiguration.ephemeralSessionConfiguration;
   config.timeoutIntervalForRequest = 12;
   config.timeoutIntervalForResource = 20;
@@ -136,16 +167,18 @@ static NSNumber* observation_code(NSDictionary* response, NSTimeInterval now,
   [_previewTimer invalidate];
 }
 
-- (NSInteger)liveIntensity {
-  if (!self.automatic || !self.weatherCode ||
-      !fresh_observation(self.observationTime, NSDate.date.timeIntervalSince1970)) return 0;
-  return rain_intensity(self.weatherCode.integerValue);
+- (BOOL)hasLiveWeather {
+  return self.automatic && self.weatherCode &&
+    fresh_observation(self.observationTime, NSDate.date.timeIntervalSince1970);
 }
 
 - (void)applyWeather {
-  NSInteger intensity = self.preview ? 2 : self.liveIntensity;
-  self.raincoatChange(intensity > 0);
-  self.rain.intensity = self.showDesktopRain ? intensity : 0;
+  WeatherScene scene = {0};
+  if (self.previewEffect) scene = (WeatherScene){self.previewEffect, 2, nil};
+  else if (self.hasLiveWeather) scene = scene_for_code(self.weatherCode.integerValue);
+  self.raincoatChange(scene.effect == KnitWeatherEffectRain);
+  [self.desktop showEffect:self.showDesktopWeather ? scene.effect : KnitWeatherEffectNone
+                 intensity:scene.intensity];
 }
 
 - (NSURLSessionDataTask*)get:(NSURL*)url completion:(void (^)(NSDictionary*))complete {
@@ -204,22 +237,26 @@ static NSNumber* observation_code(NSDictionary* response, NSTimeInterval now,
   [self updatePolling];
 }
 
-- (void)toggleDesktopRain:(id)sender {
-  self.showDesktopRain = !self.showDesktopRain;
-  [NSUserDefaults.standardUserDefaults setBool:self.showDesktopRain forKey:DesktopRainKey];
+- (void)toggleDesktopWeather:(id)sender {
+  self.showDesktopWeather = !self.showDesktopWeather;
+  [NSUserDefaults.standardUserDefaults setBool:self.showDesktopWeather forKey:DesktopWeatherKey];
   [self applyWeather];
 }
 
 - (void)endPreview {
   [self.previewTimer invalidate];
   self.previewTimer = nil;
-  self.preview = NO;
+  self.previewEffect = KnitWeatherEffectNone;
   [self applyWeather];
 }
 
-- (void)togglePreview:(id)sender {
-  if (self.preview) { [self endPreview]; return; }
-  self.preview = YES;
+- (void)stopPreview:(id)sender {
+  [self endPreview];
+}
+
+- (void)startPreview:(NSMenuItem*)sender {
+  [self.previewTimer invalidate];
+  self.previewEffect = sender.tag;
   __weak KnitWeather* weakSelf = self;
   self.previewTimer = [NSTimer scheduledTimerWithTimeInterval:PreviewDuration repeats:NO
       block:^(NSTimer* timer) { (void)timer; [weakSelf endPreview]; }];
@@ -295,25 +332,41 @@ static NSNumber* observation_code(NSDictionary* response, NSTimeInterval now,
 
 - (void)populateMenu:(NSMenu*)menu {
   NSString* status;
-  if (self.preview) status = @"Rain Preview · Ends Automatically";
+  if (self.previewEffect)
+    status = [NSString stringWithFormat:@"%@ Preview · Ends Automatically", effect_name(self.previewEffect)];
   else if (!self.automatic) status = @"Live Weather Is Off";
-  else if (!self.weatherCode || !fresh_observation(self.observationTime, NSDate.date.timeIntervalSince1970))
-    status = self.forecast ? @"Checking Weather…" : @"Weather Is Unavailable";
-  else {
-    NSArray* descriptions = @[@"No Rain", @"Light Rain", @"Rain", @"Heavy Rain"];
-    status = descriptions[self.liveIntensity];
-  }
+  else if (!self.hasLiveWeather) status = self.forecast ? @"Checking Weather…" : @"Weather Is Unavailable";
+  else status = scene_for_code(self.weatherCode.integerValue).label;
+
   if (self.city) status = [NSString stringWithFormat:@"%@ · %@", self.city[@"label"], status];
   [self addTo:menu title:status action:NULL checked:NO];
   [menu addItem:NSMenuItem.separatorItem];
   [self addTo:menu title:@"Follow Local Weather" action:@selector(toggleAutomatic:) checked:self.automatic];
   [self addTo:menu title:self.searching ? @"Searching for Cities…" : @"Choose City…"
       action:self.searching ? NULL : @selector(chooseCity:) checked:NO];
-  [self addTo:menu title:@"Show Desktop Rain" action:@selector(toggleDesktopRain:) checked:self.showDesktopRain];
-  if (self.showDesktopRain && NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion)
+  [self addTo:menu title:@"Show Desktop Weather" action:@selector(toggleDesktopWeather:) checked:self.showDesktopWeather];
+  BOOL reduceMotion = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion;
+  if (self.showDesktopWeather && reduceMotion)
     [self addTo:menu title:@"Animation Paused by Reduce Motion" action:NULL checked:NO];
   [menu addItem:NSMenuItem.separatorItem];
-  [self addTo:menu title:self.preview ? @"End Rain Preview" : @"Preview Rain for 5 Minutes"
-      action:@selector(togglePreview:) checked:NO];
+
+  NSMenuItem* previewItem = [self addTo:menu title:@"Preview Weather" action:NULL checked:NO];
+  previewItem.enabled = YES;
+  previewItem.toolTip = @"Previews end after five minutes.";
+  NSMenu* previews = [[NSMenu alloc] initWithTitle:previewItem.title];
+  previews.autoenablesItems = NO;
+  const KnitWeatherEffect effects[] = {KnitWeatherEffectRain, KnitWeatherEffectSnow,
+    KnitWeatherEffectFog, KnitWeatherEffectClouds};
+  for (NSUInteger i = 0; i < sizeof effects / sizeof effects[0]; i++) {
+    KnitWeatherEffect effect = effects[i];
+    NSMenuItem* item = [self addTo:previews title:effect_name(effect) action:@selector(startPreview:)
+                          checked:self.previewEffect == effect];
+    item.tag = effect;
+    // Rain can still preview the coat if the user turned off desktop motion.
+    item.enabled = effect == KnitWeatherEffectRain || (self.showDesktopWeather && !reduceMotion);
+  }
+  previewItem.submenu = previews;
+  if (self.previewEffect)
+    [self addTo:menu title:@"End Preview" action:@selector(stopPreview:) checked:NO];
 }
 @end

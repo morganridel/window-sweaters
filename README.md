@@ -13,9 +13,9 @@ https://github.com/user-attachments/assets/1ee85981-8882-4cb5-8bc3-75d8462a1f1a
 
 Build this branch using [Build it yourself](#build-it-yourself) to get the weather features. The upstream downloads below are for the original app.
 
-Open the yarn icon → **Weather** → **Choose City…** to follow the weather in a city. When it rains, enabled sweater borders put on matte yellow raincoats with silver snaps and a stitched hem. Rain falls above the wallpaper and behind your windows, with more drops in heavier rain. Your usual sweaters return as soon as conditions turn dry.
+Open the yarn icon → **Weather** → **Choose City…** to follow the weather in a city. When it rains, enabled sweater borders put on matte yellow raincoats with silver snaps and a stitched hem. Rain, snow, fog, and clouds move above the wallpaper and behind your windows. Heavier rain brings more drops at the same gentle speed. Your usual sweaters return when the rain stops.
 
-**Preview Rain for 5 Minutes** works without a city or a network connection. Turn off **Show Desktop Rain** to keep the raincoats with no animation. The desktop layer also respects the macOS Reduce Motion setting.
+**Preview Weather** lets you try any of the four effects for five minutes without a city or a network connection. Turn off **Show Desktop Weather** to keep the raincoats without animation. The desktop layer also respects the macOS Reduce Motion setting.
 
 Live weather is optional and off until you choose a city. [Open-Meteo](https://open-meteo.com/) receives your search term and then the selected city's coordinates, rounded to two decimal places, about every ten minutes. The app does not use Location Services. When the last weather reading is more than 45 minutes old, the app returns to its usual sweaters.
 
