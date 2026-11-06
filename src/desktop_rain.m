@@ -2,7 +2,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 @interface KnitRainPanel : NSPanel
-@property(strong) CAEmitterLayer* emitter;
+@property(copy) NSArray<CALayer*>* rainGroups;
 @end
 
 @implementation KnitRainPanel
@@ -42,22 +42,51 @@ static CGImageRef new_streak(void) CF_RETURNS_RETAINED {
   return streak;
 }
 
-static CAEmitterCell* rain_cell(CGImageRef streak, CGFloat velocity, CGFloat height,
-                                CGFloat width, CGFloat scale, CGFloat rate, CGFloat alpha) {
-  CAEmitterCell* drop = [CAEmitterCell emitterCell];
-  drop.contents = (__bridge id)streak;
-  drop.contentsScale = 2;
-  drop.color = [NSColor colorWithWhite:1 alpha:alpha].CGColor;
-  drop.scale = scale;
-  drop.scaleRange = scale * 0.30;
-  drop.velocity = velocity;
-  drop.velocityRange = velocity * 0.18;
-  // AppKit's backing layer uses an upward y axis.
-  drop.emissionLongitude = -M_PI_2 + 0.09;
-  drop.emissionRange = 0.06;
-  drop.lifetime = (height + 150) / (velocity * 0.8);
-  drop.birthRate = rate * width / 1000;
-  return drop;
+static CGFloat random_unit(void) {
+  return arc4random_uniform(10000) / 10000.0;
+}
+
+static CALayer* rain_group(CGImageRef streak, CGRect bounds, NSUInteger count) {
+  CALayer* group = [CALayer layer];
+  group.frame = bounds;
+  CGFloat width = NSWidth(bounds), height = NSHeight(bounds);
+  const CGFloat margin = 28;
+  CGFloat travel = height + 2 * margin;
+  CFTimeInterval now = CACurrentMediaTime();
+  // Different depths give the scene motion without a single fast wall of rain.
+  const struct { CGFloat speed, scale, alpha; } depths[] = {
+    { 160, .48, .42 }, { 245, .68, .67 }, { 325, .88, .83 }
+  };
+  for (NSUInteger i = 0; i < count; i++) {
+    NSUInteger depth = arc4random_uniform(10);
+    depth = depth < 5 ? 0 : depth < 9 ? 1 : 2;
+    CGFloat scale = depths[depth].scale * (.85 + random_unit() * .3);
+    CGFloat speed = depths[depth].speed * (.9 + random_unit() * .2);
+    CGFloat drift = travel * (.045 + random_unit() * .03);
+    CGFloat startX = -drift + random_unit() * (width + drift);
+    CGPoint start = CGPointMake(startX, height + margin);
+    // AppKit layer coordinates run up. Positive x and decreasing y give a
+    // slight rightward drift. Both ends are outside the visible desktop.
+    CGPoint end = CGPointMake(startX + drift, -margin);
+    CALayer* drop = [CALayer layer];
+    drop.contents = (__bridge id)streak;
+    drop.contentsScale = 2;
+    drop.bounds = CGRectMake(0, 0, CGImageGetWidth(streak) * scale / 2,
+                                   CGImageGetHeight(streak) * scale / 2);
+    drop.opacity = depths[depth].alpha;
+    drop.position = end;
+    [group addSublayer:drop];
+
+    CABasicAnimation* fall = [CABasicAnimation animationWithKeyPath:@"position"];
+    fall.fromValue = [NSValue valueWithPoint:start];
+    fall.toValue = [NSValue valueWithPoint:end];
+    fall.duration = travel / speed;
+    fall.beginTime = now - random_unit() * fall.duration;
+    fall.repeatCount = HUGE_VALF;
+    fall.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear];
+    [drop addAnimation:fall forKey:@"fall"];
+  }
+  return group;
 }
 
 static KnitRainPanel* rain_panel(NSScreen* screen, CGImageRef streak) {
@@ -81,21 +110,18 @@ static KnitRainPanel* rain_panel(NSScreen* screen, CGImageRef streak) {
 
   NSView* view = panel.contentView;
   view.wantsLayer = YES;
-  CGFloat width = NSWidth(view.bounds), height = NSHeight(view.bounds);
-  CAEmitterLayer* emitter = [CAEmitterLayer layer];
-  emitter.frame = view.bounds;
-  emitter.masksToBounds = YES;
-  emitter.emitterShape = kCAEmitterLayerLine;
-  emitter.emitterMode = kCAEmitterLayerOutline;
-  emitter.emitterPosition = CGPointMake(width / 2, height + 24);
-  emitter.emitterSize = CGSizeMake(width + 320, 0);
-  emitter.emitterCells = @[
-    rain_cell(streak, 460, height, width, 0.66, 66, 0.43),
-    rain_cell(streak, 760, height, width, 1.00, 52, 0.72),
-    rain_cell(streak, 990, height, width, 1.30, 17, 0.91)
+  view.layer.masksToBounds = YES;
+  CGRect bounds = view.bounds;
+  // Cap the count on large displays. Intensity changes reveal extra drops
+  // at the same speeds without restarting the ones already on screen.
+  CGFloat area = NSWidth(bounds) * NSHeight(bounds);
+  NSUInteger count = MIN(360, MAX(24, ceil(area / 6800)));
+  panel.rainGroups = @[
+    rain_group(streak, bounds, (count + 1) / 2),
+    rain_group(streak, bounds, count / 2),
+    rain_group(streak, bounds, count * 3 / 5)
   ];
-  [view.layer addSublayer:emitter];
-  panel.emitter = emitter;
+  for (CALayer* group in panel.rainGroups) [view.layer addSublayer:group];
   return panel;
 }
 
@@ -131,15 +157,15 @@ static KnitRainPanel* rain_panel(NSScreen* screen, CGImageRef streak) {
   if (_intensity == intensity) return;
   _intensity = intensity;
   if (!intensity || !self.panels.count) [self rebuild:nil];
-  else [self updateBirthRates];
+  else [self updateDensity];
 }
 
-- (void)updateBirthRates {
+- (void)updateDensity {
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
-  const float rates[] = { 0, 0.48, 1.0, 1.6 };
   for (KnitRainPanel* panel in self.panels)
-    panel.emitter.birthRate = rates[self.intensity];
+    for (NSUInteger i = 0; i < panel.rainGroups.count; i++)
+      panel.rainGroups[i].hidden = i >= (NSUInteger)self.intensity;
   [CATransaction commit];
 }
 
@@ -156,7 +182,7 @@ static KnitRainPanel* rain_panel(NSScreen* screen, CGImageRef streak) {
     [panels addObject:rain_panel(screen, streak)];
   CGImageRelease(streak);
   self.panels = panels;
-  [self updateBirthRates];
+  [self updateDensity];
   for (KnitRainPanel* panel in self.panels) [panel orderFrontRegardless];
 }
 
